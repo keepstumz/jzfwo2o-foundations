@@ -18,4 +18,5 @@ import java.util.List;
 public interface ServeMapper extends BaseMapper<Serve> {
 
     List<ServeResDTO> queryServeListByRegionId(@Param("regionId") Long regionId);
+
 }
