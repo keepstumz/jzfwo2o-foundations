@@ -84,7 +84,7 @@ public class ServeItemServiceImpl extends ServiceImpl<ServeItemMapper, ServeItem
         serveItem.setId(id);
         baseMapper.updateById(serveItem);
 
-        //2.同步数据到es
+        //2.修改serve_sync表中的数据
         ServeSyncUpdateReqDTO serveSyncUpdateReqDTO = BeanUtil.toBean(serveItemUpsertReqDTO, ServeSyncUpdateReqDTO.class);
         serveSyncUpdateReqDTO.setServeItemName(serveItemUpsertReqDTO.getName());
         serveSyncUpdateReqDTO.setServeItemImg(serveItemUpsertReqDTO.getImg());

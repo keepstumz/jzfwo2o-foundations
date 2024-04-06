@@ -75,7 +75,7 @@ public class ServeTypeServiceImpl extends ServiceImpl<ServeTypeMapper, ServeType
         serveType.setId(id);
         baseMapper.updateById(serveType);
 
-        //2.同步数据到es
+        //2.修改serve_sync表中的数据
         ServeSyncUpdateReqDTO serveSyncUpdateReqDTO = new ServeSyncUpdateReqDTO();
         serveSyncUpdateReqDTO.setServeTypeName(serveTypeUpsertReqDTO.getName());
         serveSyncUpdateReqDTO.setServeTypeImg(serveTypeUpsertReqDTO.getImg());

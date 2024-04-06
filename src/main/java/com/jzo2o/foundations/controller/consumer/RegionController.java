@@ -30,7 +30,7 @@ public class RegionController {
     @GetMapping("/activeRegionList")
     @ApiOperation("已开通服务区域列表")
     public List<RegionSimpleResDTO> activeRegionList() {
-        return regionService.queryActiveRegionListCache();
+        return regionService.queryActiveRegionList();
     }
 
 }

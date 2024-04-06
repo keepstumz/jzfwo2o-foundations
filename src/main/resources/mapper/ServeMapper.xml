@@ -24,4 +24,102 @@
             serve.region_id = #{regionId}
     </select>
 
+    <select id="firstPageQueryByRegionId" resultMap="ServeCategoryMap">
+        SELECT
+            type.id serve_type_id,
+            serve.city_code,
+            type.serve_type_icon,
+            type.sort_num serve_type_sort_num,
+            type.name serve_type_name,
+            item.sort_num serve_item_sort_num,
+            item.name serve_item_name,
+            item.id serve_item_id,
+            item.serve_item_icon,
+            serve.id serve_id
+            
+        FROM
+            serve
+                inner JOIN serve_item AS item ON serve.serve_item_id = item.id
+                inner JOIN serve_type AS type ON item.serve_type_id = type.id
+        WHERE
+            serve.region_id = #{regionId}
+            and serve.sale_status = 2
+        order by serve_type_sort_num, serve_item_sort_num
+    </select>
+
+    <select id="queryServeTypeListByRegionId"
+            resultType="com.jzo2o.foundations.model.dto.response.ServeAggregationTypeSimpleResDTO">
+        select
+            type.id serve_type_id,
+            type.img serve_type_img,
+            type.sort_num serve_type_sort_num,
+            type.name serve_type_name
+
+        from serve
+            inner join serve_item as item on serve.serve_item_id = item.id
+            inner join serve_type as type on item.serve_type_id = type.id
+        where
+            serve.region_id = #{regionId}
+            and serve.sale_status = 2
+        group by type.id
+    </select>
+
+    <select id="findHotServeListByRegionIdCache"
+            resultType="com.jzo2o.foundations.model.dto.response.ServeAggregationSimpleResDTO">
+        select
+            serve.id,
+            item.id serve_item_id,
+            item.name serve_item_name,
+            item.img serve_item_img,
+            item.unit,
+            serve.price,
+            item.img detail_img,
+            serve.city_code
+
+        from serve
+                 inner join serve_item as item on serve.serve_item_id = item.id
+                 inner join serve_type as type on item.serve_type_id = type.id
+        where
+            serve.region_id = #{regionId}
+          and serve.sale_status = 2
+            and serve.is_hot = 1
+        order by item.create_time desc
+    </select>
+    <select id="listServeInfo"
+            resultType="com.jzo2o.foundations.model.dto.response.ServeAggregationSimpleResDTO">
+        select
+            serve.id,
+            item.id serve_item_id,
+            item.name serve_item_name,
+            item.img serve_item_img,
+            item.unit,
+            serve.price,
+            item.img detail_img,
+            serve.city_code
+
+        from serve
+                 inner join serve_item as item on serve.serve_item_id = item.id
+        where
+            serve.region_id = #{regionId}
+          and serve_item_id = #{serveItemId}
+          and serve.sale_status = 2
+    </select>
+
+
+    <resultMap id="ServeCategoryMap" type="com.jzo2o.foundations.model.dto.response.ServeCategoryResDTO">
+        <id column="serve_type_id" property="serveTypeId"></id>
+        <result column="serve_type_name" property="serveTypeName"></result>
+        <result column="serve_type_icon" property="serveTypeIcon"></result>
+        <result column="city_code" property="cityCode"></result>
+        <result column="serve_type_sort_num" property="serveTypeSortNum"></result>
+
+        <collection property="serveResDTOList" ofType="com.jzo2o.foundations.model.dto.response.ServeSimpleResDTO">
+            <id column="serve_id" property="id"></id>
+            <result column="serve_item_id" property="serveItemId"></result>
+            <result column="serve_item_name" property="serveItemName"></result>
+            <result column="serve_item_icon" property="serveItemIcon"></result>
+            <result column="serve_item_sort_num" property="serveItemSortNum"></result>
+        </collection>
+    </resultMap>
+
 </mapper>

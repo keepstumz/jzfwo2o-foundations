@@ -5,6 +5,7 @@ import com.jzo2o.common.model.PageResult;
 import com.jzo2o.foundations.model.domain.Serve;
 import com.jzo2o.foundations.model.dto.request.ServePageQueryReqDTO;
 import com.jzo2o.foundations.model.dto.request.ServeUpsertReqDTO;
+import com.jzo2o.foundations.model.dto.response.ServeAggregationSimpleResDTO;
 import com.jzo2o.foundations.model.dto.response.ServeResDTO;
 
 import java.math.BigDecimal;
@@ -91,4 +92,14 @@ public interface IServeService extends IService<Serve> {
      */
     int queryServeCountByServeItemIdAndSaleStatus(Long serveItemId, Integer saleStatus);
 
+    /**
+     * 根据id查询serve表中的数据
+     * @param id
+     * @return
+     */
+    Serve queryServeById(Long id);
+
+    ServeAggregationSimpleResDTO findDetailById(Long id);
+
+    List<Serve> queryHotAndOnSaleServeList();
 }

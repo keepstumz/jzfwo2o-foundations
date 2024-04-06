@@ -6,24 +6,23 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.jzo2o.common.enums.EnableStatusEnum;
 import com.jzo2o.common.expcetions.ForbiddenOperationException;
 import com.jzo2o.common.model.PageResult;
 import com.jzo2o.foundations.constants.RedisConstants;
 import com.jzo2o.foundations.enums.FoundationStatusEnum;
-import com.jzo2o.foundations.mapper.RegionMapper;
-import com.jzo2o.foundations.mapper.ServeItemMapper;
-import com.jzo2o.foundations.mapper.ServeMapper;
-import com.jzo2o.foundations.model.domain.Region;
-import com.jzo2o.foundations.model.domain.Serve;
-import com.jzo2o.foundations.model.domain.ServeItem;
-import com.jzo2o.foundations.model.domain.ServeSync;
+import com.jzo2o.foundations.mapper.*;
+import com.jzo2o.foundations.model.domain.*;
 import com.jzo2o.foundations.model.dto.request.ServePageQueryReqDTO;
+import com.jzo2o.foundations.model.dto.request.ServeSyncUpdateReqDTO;
 import com.jzo2o.foundations.model.dto.request.ServeUpsertReqDTO;
+import com.jzo2o.foundations.model.dto.response.ServeAggregationSimpleResDTO;
 import com.jzo2o.foundations.model.dto.response.ServeResDTO;
-import com.jzo2o.foundations.service.IServeService;
+import com.jzo2o.foundations.service.*;
 import com.jzo2o.mysql.utils.PageHelperUtils;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +46,18 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
 
     @Resource
     private RegionMapper regionMapper;
+
+    @Resource
+    private HomeService homeService;
+
+    @Resource
+    private ServeTypeMapper serveTypeMapper;
+
+    @Resource
+    private ServeSyncMapper serveSyncMapper;
+
+
+
 
     /**
      * 分页查询
@@ -90,12 +101,18 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
 
     @Override
     @Transactional
+    @CachePut(value = RedisConstants.CacheName.SERVE, key = "#id", unless = "#result.saleStatus != 2", cacheManager = RedisConstants.CacheManager.ONE_DAY)
     public Serve update(Long id, BigDecimal price) {
         //1.更新服务价格
         LambdaUpdateWrapper<Serve> updateWrapper = Wrappers.<Serve>lambdaUpdate()
                 .eq(Serve::getId, id)
                 .set(Serve::getPrice, price);
         super.update(updateWrapper);
+
+        //2.修改serve_sync表中的数据
+        ServeSync serveSync = serveSyncMapper.selectById(id);
+        serveSync.setPrice(price);
+        serveSyncMapper.updateById(serveSync);
 
         return baseMapper.selectById(id);
     }
@@ -118,6 +135,7 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
 
     @Override
     @Transactional
+    @CachePut(value = RedisConstants.CacheName.SERVE, key = "#id",  cacheManager = RedisConstants.CacheManager.ONE_DAY)
     public Serve onSale(Long id){
         Serve serve = baseMapper.selectById(id);
         if(ObjectUtil.isNull(serve)){
@@ -147,12 +165,18 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
                 .eq(Serve::getId, id)
                 .set(Serve::getSaleStatus, FoundationStatusEnum.ENABLE.getStatus());
         update(updateWrapper);
+
+        //添加到serve_sync表中
+        //添加同步表
+        addServeSync(id);
+
         return baseMapper.selectById(id);
 
     }
 
     @Override
     @Transactional
+    @CacheEvict(value = RedisConstants.CacheName.SERVE, key = "#id", beforeInvocation = true)
     public Serve offSale(Long id){
         Serve serve = baseMapper.selectById(id);
         if(ObjectUtil.isNull(serve)){
@@ -169,6 +193,10 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
                 .eq(Serve::getId, id)
                 .set(Serve::getSaleStatus, FoundationStatusEnum.DISABLE.getStatus());
         update(updateWrapper);
+
+        // 删除serve_sync表中的数据
+        serveSyncMapper.deleteById(id);
+
         return baseMapper.selectById(id);
     }
 
@@ -188,6 +216,11 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
                 .set(Serve::getIsHot, flag)
                 .set(Serve::getHotTimeStamp, System.currentTimeMillis());
         super.update(updateWrapper);
+
+        //2.修改serve_sync表中的数据
+        ServeSync serveSync = serveSyncMapper.selectById(id);
+        serveSync.setIsHot(flag);
+        serveSyncMapper.updateById(serveSync);
     }
 
     /**
@@ -217,6 +250,91 @@ public class ServeServiceImpl extends ServiceImpl<ServeMapper, Serve> implements
                 .eq(Serve::getServeItemId, serveItemId)
                 .eq(ObjectUtil.isNotEmpty(saleStatus), Serve::getSaleStatus, saleStatus);
         return baseMapper.selectCount(queryWrapper);
+    }
+
+    /**
+     * 根据id查询serve表中的数据
+     * @param id
+     * @return
+     */
+    @Override
+    @Cacheable(key = "#id", value = RedisConstants.CacheName.SERVE)
+    public Serve queryServeById(Long id) {
+        return baseMapper.selectById(id);
+    }
+
+    /**
+     * 根据id查询服务详情
+     *
+     * @param id 服务id
+     * @return 服务详情
+     */
+    @Override
+    public ServeAggregationSimpleResDTO findDetailById(Long id) {
+        //1.查询服务信息
+        Serve serve = homeService.queryServeByIdCache(id);
+
+        //2.查询服务项信息
+        ServeItem serveItem = homeService.queryServeItemByIdCache(serve.getServeItemId());
+
+        //3.封装数据
+        ServeAggregationSimpleResDTO serveAggregationSimpleResDTO = BeanUtil.toBean(serve, ServeAggregationSimpleResDTO.class);
+        serveAggregationSimpleResDTO.setServeItemName(serveItem.getName());
+        serveAggregationSimpleResDTO.setServeItemImg(serveItem.getImg());
+        serveAggregationSimpleResDTO.setDetailImg(serveItem.getDetailImg());
+        serveAggregationSimpleResDTO.setUnit(serveItem.getUnit());
+        return serveAggregationSimpleResDTO;
+    }
+
+    /**
+     * 查询热门服务列表
+     *
+     * @return 热门服务列表
+     */
+    @Override
+    public List<Serve> queryHotAndOnSaleServeList() {
+        LambdaQueryWrapper<Serve> queryWrapper = Wrappers.<Serve>lambdaQuery()
+                .eq(Serve::getIsHot, EnableStatusEnum.ENABLE.getStatus())
+                .eq(Serve::getSaleStatus, FoundationStatusEnum.ENABLE.getStatus());
+        return baseMapper.selectList(queryWrapper);
+    }
+
+
+    /**
+     * 新增服务同步数据
+     *
+     * @param serveId 服务id
+     */
+    private void addServeSync(Long serveId) {
+        //服务信息
+        Serve serve = baseMapper.selectById(serveId);
+        //区域信息
+        Region region = regionMapper.selectById(serve.getRegionId());
+        //服务项信息
+        ServeItem serveItem = serveItemMapper.selectById(serve.getServeItemId());
+        //服务类型
+        ServeType serveType = serveTypeMapper.selectById(serveItem.getServeTypeId());
+
+        ServeSync serveSync = new ServeSync();
+        serveSync.setServeTypeId(serveType.getId());
+        serveSync.setServeTypeName(serveType.getName());
+        serveSync.setServeTypeIcon(serveType.getServeTypeIcon());
+        serveSync.setServeTypeImg(serveType.getImg());
+        serveSync.setServeTypeSortNum(serveType.getSortNum());
+
+        serveSync.setServeItemId(serveItem.getId());
+        serveSync.setServeItemIcon(serveItem.getServeItemIcon());
+        serveSync.setServeItemName(serveItem.getName());
+        serveSync.setServeItemImg(serveItem.getImg());
+        serveSync.setServeItemSortNum(serveItem.getSortNum());
+        serveSync.setUnit(serveItem.getUnit());
+        serveSync.setDetailImg(serveItem.getDetailImg());
+        serveSync.setPrice(serve.getPrice());
+
+        serveSync.setCityCode(region.getCityCode());
+        serveSync.setId(serve.getId());
+        serveSync.setIsHot(serve.getIsHot());
+        serveSyncMapper.insert(serveSync);
     }
 
 }
