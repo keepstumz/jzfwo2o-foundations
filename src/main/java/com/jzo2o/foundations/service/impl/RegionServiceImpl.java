@@ -19,6 +19,7 @@ import com.jzo2o.foundations.model.domain.Region;
 import com.jzo2o.foundations.model.dto.request.RegionPageQueryReqDTO;
 import com.jzo2o.foundations.model.dto.request.RegionUpsertReqDTO;
 import com.jzo2o.foundations.model.dto.response.RegionResDTO;
+import com.jzo2o.foundations.service.HomeService;
 import com.jzo2o.foundations.service.IConfigRegionService;
 import com.jzo2o.foundations.service.IRegionService;
 import com.jzo2o.foundations.service.IServeService;
@@ -47,6 +48,8 @@ public class RegionServiceImpl extends ServiceImpl<RegionMapper, Region> impleme
     private IConfigRegionService configRegionService;
     @Resource
     private CityDirectoryMapper cityDirectoryMapper;
+    @Resource
+    private HomeService homeService;
 
 
     /**
@@ -178,7 +181,11 @@ public class RegionServiceImpl extends ServiceImpl<RegionMapper, Region> impleme
                 .set(Region::getActiveStatus, FoundationStatusEnum.ENABLE.getStatus());
         update(updateWrapper);
 
-        //todo 3.如果是启用操作，刷新缓存：启用区域列表、首页图标、热门服务、服务类型
+        //3.如果是启用操作，刷新缓存：启用区域列表、首页图标、热门服务、服务类型
+        homeService.queryActiveRegionListCache();
+        homeService.firstPageQueryByRegionId(id);
+        homeService.findHotServeListByRegionIdCache(id);
+        homeService.serveTypeListQueryByRegionId(id);
     }
 
     /**
